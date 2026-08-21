@@ -1,0 +1,46 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Python testing/cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# React Native / Android
+android/.gradle/
+android/app/build/
+android/build/
+android/.cxx/
+*.keystore
+*.jks
+
+# iOS
+ios/Pods/
+ios/build/
+DerivedData/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
