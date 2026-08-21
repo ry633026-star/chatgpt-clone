@@ -5,6 +5,11 @@ const appName = 'ChatGPTFrontend';
 
 AppRegistry.registerComponent(appName, () => App);
 
-AppRegistry.runApplication(appName, {
-  rootTag: document.getElementById('root'),
-});
+const rootTag = document.getElementById('root');
+
+if (rootTag) {
+  AppRegistry.runApplication(appName, {
+    initialProps: {},
+    rootTag: rootTag as any,
+  });
+}
