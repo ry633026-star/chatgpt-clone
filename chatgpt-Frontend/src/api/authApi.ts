@@ -5,7 +5,10 @@ import {
   User,
 } from '../types/auth';
 
-const API_URL = 'http://10.0.2.2:8000';
+import { Platform } from 'react-native';
+
+const API_URL =
+  Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
 
 async function handleResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
