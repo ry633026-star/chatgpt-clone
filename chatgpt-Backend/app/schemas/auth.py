@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
@@ -16,6 +16,16 @@ class RegisterRequest(BaseModel):
         max_length=128,
     )
 
+    @field_validator("email")
+    @classmethod
+    def validate_gmail(cls, value: EmailStr) -> str:
+        email = str(value).strip().lower()
+
+        if not email.endswith("@gmail.com"):
+            raise ValueError("Only @gmail.com email addresses are allowed")
+
+        return email
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -24,6 +34,16 @@ class LoginRequest(BaseModel):
         min_length=8,
         max_length=128,
     )
+
+    @field_validator("email")
+    @classmethod
+    def validate_gmail(cls, value: EmailStr) -> str:
+        email = str(value).strip().lower()
+
+        if not email.endswith("@gmail.com"):
+            raise ValueError("Only @gmail.com email addresses are allowed")
+
+        return email
 
 
 class TokenResponse(BaseModel):
@@ -36,4 +56,6 @@ class UserResponse(BaseModel):
     name: str
     email: EmailStr
 
-    model_config = {"from_attributes": True}
+    model_config = {
+        "from_attributes": True,
+    }
