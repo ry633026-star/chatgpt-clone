@@ -15,7 +15,7 @@ from app.schemas.chat import (
 )
 
 # Use your existing JWT dependency here.
-from app.core.security import get_current_user
+from app.routers.auth import get_current_user
 from app.models.user import User
 
 
