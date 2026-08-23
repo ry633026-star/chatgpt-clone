@@ -11,7 +11,7 @@ import { useAuth } from '../auth/AuthContext';
 type Screen = 'login' | 'register';
 
 export default function AppNavigator() {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
 
   const [screen, setScreen] = useState<Screen>('login');
 
@@ -30,15 +30,7 @@ export default function AppNavigator() {
   }
 
   if (user) {
-    return (
-      <ChatScreen
-        userName={user.name}
-        onLogout={async () => {
-          const { logout } = useAuth();
-          await logout();
-        }}
-      />
-    );
+    return <ChatScreen userName={user.name} onLogout={logout} />;
   }
 
   if (screen === 'register') {

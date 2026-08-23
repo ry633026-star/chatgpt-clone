@@ -17,10 +17,6 @@ import {
   sendMessage as sendChatMessage,
 } from '../api/chatApi';
 
-const [conversationId, setConversationId] = useState<string | null>(null);
-
-const [loadingMessages, setLoadingMessages] = useState(false);
-
 interface Props {
   userName: string;
   onLogout: () => Promise<void>;
@@ -33,6 +29,8 @@ interface Message {
 }
 
 export default function ChatScreen({ userName, onLogout }: Props) {
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
 
