@@ -6,9 +6,12 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.conversation import Conversation
+from app.models.message import Message
 from app.schemas.chat import (
     ConversationCreate,
     ConversationResponse,
+    MessageCreate,
+    MessageResponse,
 )
 
 # Use your existing JWT dependency here.
@@ -83,3 +86,64 @@ def delete_conversation(
     db.commit()
 
     return {"message": "Conversation deleted"}
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages",
+    response_model=list[MessageResponse],
+)
+def send_message(
+    conversation_id: uuid.UUID,
+    data: MessageCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    content = data.content.strip()
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="Message cannot be empty",
+        )
+
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found",
+        )
+
+    user_message = Message(
+        conversation_id=conversation.id,
+        role="user",
+        content=content,
+    )
+
+    db.add(user_message)
+
+    assistant_message = Message(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=(
+            "This is a temporary AI response. "
+            "The real AI model will be connected next."
+        ),
+    )
+
+    db.add(assistant_message)
+
+    db.commit()
+
+    db.refresh(user_message)
+    db.refresh(assistant_message)
+
+    return [
+        user_message,
+        assistant_message,
+    ]
