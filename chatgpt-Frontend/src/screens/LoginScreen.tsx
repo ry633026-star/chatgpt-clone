@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import {
   ActivityIndicator,
   Alert,
@@ -9,41 +10,38 @@ import {
   View,
 } from 'react-native';
 
-import { loginUser } from '../api/authApi';
-import { saveToken } from '../storage/tokenStorage';
+import { useAuth } from '../auth/AuthContext';
 
 interface Props {
-  onLogin: () => void;
   onRegister: () => void;
 }
 
-export default function LoginScreen({ onLogin, onRegister }: Props) {
+export default function LoginScreen({ onRegister }: Props) {
+  const { login } = useAuth();
+
   const [email, setEmail] = useState('');
+
   const [password, setPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+    if (!email.trim() || !password) {
+      Alert.alert('Error', 'Please enter email and password.');
       return;
     }
 
     try {
       setLoading(true);
 
-      const result = await loginUser({
-        email,
+      await login({
+        email: email.trim().toLowerCase(),
         password,
       });
-
-      await saveToken(result.access_token);
-
-      onLogin();
     } catch (error) {
       Alert.alert(
         'Login failed',
-        error instanceof Error ? error.message : 'Unable to login',
+        error instanceof Error ? error.message : 'Unable to login.',
       );
     } finally {
       setLoading(false);
@@ -52,9 +50,11 @@ export default function LoginScreen({ onLogin, onRegister }: Props) {
 
   return (
     <View style={styles.container}>
+      <Text style={styles.logo}>ChatGPT</Text>
+
       <Text style={styles.title}>Welcome back</Text>
 
-      <Text style={styles.subtitle}>Login to your ChatGPT account</Text>
+      <Text style={styles.subtitle}>Log in to continue</Text>
 
       <TextInput
         style={styles.input}
@@ -62,6 +62,7 @@ export default function LoginScreen({ onLogin, onRegister }: Props) {
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
+        autoCorrect={false}
         keyboardType="email-address"
       />
 
@@ -76,7 +77,7 @@ export default function LoginScreen({ onLogin, onRegister }: Props) {
       {loading ? (
         <ActivityIndicator />
       ) : (
-        <Button title="Login" onPress={handleLogin} />
+        <Button title="Log in" onPress={handleLogin} />
       )}
 
       <View style={styles.register}>
@@ -98,15 +99,22 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 
-  title: {
+  logo: {
     fontSize: 32,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 40,
+  },
+
+  title: {
+    fontSize: 28,
     fontWeight: '700',
     marginBottom: 8,
   },
 
   subtitle: {
     fontSize: 16,
-    marginBottom: 32,
+    marginBottom: 28,
   },
 
   input: {
