@@ -30,6 +30,12 @@ module.exports = {
   module: {
     rules: [
       {
+        test: /\.m?js$/,
+        resolve: {
+          fullySpecified: false,
+        },
+      },
+      {
         test: /\.[jt]sx?$/,
         exclude: /node_modules/,
         use: {
