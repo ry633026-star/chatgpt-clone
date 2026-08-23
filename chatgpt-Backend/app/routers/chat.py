@@ -1,4 +1,5 @@
 import uuid
+from app.services.ai_service import generate_ai_response
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -126,14 +127,37 @@ def send_message(
     )
 
     db.add(user_message)
+    db.flush()
+
+    previous_messages = db.scalars(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.asc())
+    ).all()
+
+    ai_messages = [
+        {
+            "role": message.role,
+            "content": message.content,
+        }
+        for message in previous_messages
+    ]
+
+    try:
+        assistant_content = generate_ai_response(ai_messages)
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI service error: {exc}",
+        )
 
     assistant_message = Message(
         conversation_id=conversation.id,
         role="assistant",
-        content=(
-            "This is a temporary AI response. "
-            "The real AI model will be connected next."
-        ),
+        content=assistant_content,
     )
 
     db.add(assistant_message)
