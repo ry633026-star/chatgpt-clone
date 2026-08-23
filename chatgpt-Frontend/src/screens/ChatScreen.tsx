@@ -11,6 +11,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import {
+  createConversation,
+  getMessages,
+  sendMessage as sendChatMessage,
+} from '../api/chatApi';
+
+const [conversationId, setConversationId] = useState<string | null>(null);
+
+const [loadingMessages, setLoadingMessages] = useState(false);
 
 interface Props {
   userName: string;
@@ -36,31 +45,35 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       return;
     }
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: text,
-    };
+    try {
+      setSending(true);
 
-    setMessages(prev => [...prev, userMessage]);
+      let activeConversationId = conversationId;
 
-    setMessage('');
-    setSending(true);
+      if (!activeConversationId) {
+        const conversation = await createConversation(text.slice(0, 40));
 
-    // Temporary response.
-    // Later this will call your AI backend.
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: `${Date.now()}-assistant`,
-        role: 'assistant',
-        content:
-          'I received your message. AI chat integration will be connected next.',
-      };
+        activeConversationId = conversation.id;
 
-      setMessages(prev => [...prev, assistantMessage]);
+        setConversationId(activeConversationId);
+      }
 
+      const result = await sendChatMessage(activeConversationId, text);
+
+      setMessages(
+        result.map(item => ({
+          id: item.id,
+          role: item.role === 'assistant' ? 'assistant' : 'user',
+          content: item.content,
+        })),
+      );
+
+      setMessage('');
+    } catch (error) {
+      console.error(error);
+    } finally {
       setSending(false);
-    }, 700);
+    }
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -104,7 +117,11 @@ export default function ChatScreen({ userName, onLogout }: Props) {
 
           <Pressable
             style={styles.newChatButton}
-            onPress={() => setMessages([])}
+            onPress={() => {
+              setMessages([]);
+              setConversationId(null);
+              setMessage('');
+            }}
           >
             <Text style={styles.newChatText}>+ New chat</Text>
           </Pressable>
