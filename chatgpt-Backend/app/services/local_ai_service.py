@@ -9,17 +9,21 @@ from transformers import (
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 
 
+print("Loading Qwen model...")
+
 tokenizer = AutoTokenizer.from_pretrained(
     MODEL_NAME,
 )
 
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
 )
 
 model.eval()
+
+print("Qwen model loaded successfully.")
 
 
 def generate_local_response(
@@ -38,6 +42,7 @@ def generate_local_response(
     ).to(model.device)
 
     with torch.no_grad():
+
         output = model.generate(
             **inputs,
             max_new_tokens=512,
