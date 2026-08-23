@@ -1,13 +1,15 @@
-let accessToken: string | null = null;
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const ACCESS_TOKEN_KEY = '@chatgpt_access_token';
 
 export async function saveToken(token: string): Promise<void> {
-  accessToken = token;
+  await AsyncStorage.setItem(ACCESS_TOKEN_KEY, token);
 }
 
 export async function getToken(): Promise<string | null> {
-  return accessToken;
+  return AsyncStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
 export async function removeToken(): Promise<void> {
-  accessToken = null;
+  await AsyncStorage.removeItem(ACCESS_TOKEN_KEY);
 }
