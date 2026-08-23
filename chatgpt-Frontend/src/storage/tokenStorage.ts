@@ -7,7 +7,11 @@ export async function saveToken(token: string): Promise<void> {
 }
 
 export async function getToken(): Promise<string | null> {
-  return AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+  const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+
+  console.log('JWT TOKEN EXISTS:', !!token);
+
+  return token;
 }
 
 export async function removeToken(): Promise<void> {
