@@ -1,5 +1,10 @@
 import uuid
 from app.services.ai_service import generate_ai_response
+from fastapi.responses import StreamingResponse
+
+from app.services.ai_service import (
+    stream_ai_response,
+)
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -202,3 +207,87 @@ def get_messages(
     ).all()
 
     return messages
+
+
+# streaming response
+@router.post("/conversations/{conversation_id}/messages/stream")
+def stream_message(
+    conversation_id: uuid.UUID,
+    data: MessageCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    content = data.content.strip()
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="Message cannot be empty",
+        )
+
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found",
+        )
+
+    user_message = Message(
+        conversation_id=conversation.id,
+        role="user",
+        content=content,
+    )
+
+    db.add(user_message)
+    db.commit()
+
+    previous_messages = db.scalars(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.asc())
+    ).all()
+
+    ai_messages = [
+        {
+            "role": message.role,
+            "content": message.content,
+        }
+        for message in previous_messages
+    ]
+
+    def generate():
+        full_response = ""
+
+        try:
+            for chunk in stream_ai_response(ai_messages):
+                full_response += chunk
+
+                yield chunk
+
+            assistant_message = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=full_response,
+            )
+
+            db.add(assistant_message)
+            db.commit()
+
+        except Exception as exc:
+            db.rollback()
+            print(f"Streaming AI error: {exc}")
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
