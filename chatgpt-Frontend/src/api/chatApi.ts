@@ -143,7 +143,7 @@ export async function deleteConversation(
   }
 }
 
-// streaming response
+// streaming response with mobile fallback
 export async function streamMessage(
   conversationId: string,
   content: string,
@@ -153,6 +153,42 @@ export async function streamMessage(
 
   if (!token) {
     throw new Error('Authentication required');
+  }
+
+  // Native React Native fetch (mobile) does not support response.body readable streams
+  const isStreamingSupported =
+    Platform.OS === 'web' &&
+    typeof globalThis.ReadableStream !== 'undefined';
+
+  if (!isStreamingSupported) {
+    const response = await fetch(
+      `${API_URL}/api/chat/conversations/${conversationId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          content,
+        }),
+      },
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.detail || 'Failed to send message');
+    }
+
+    const assistantMsg = Array.isArray(data)
+      ? data.find((m: any) => m.role === 'assistant')
+      : null;
+
+    if (assistantMsg && assistantMsg.content) {
+      onChunk(assistantMsg.content);
+    }
+    return;
   }
 
   const response = await fetch(
@@ -175,11 +211,13 @@ export async function streamMessage(
     throw new Error(data?.detail || 'Failed to stream message');
   }
 
-  if (!response.body) {
-    throw new Error('Streaming is not supported by this client');
+  if (!response.body || typeof (response.body as any).getReader !== 'function') {
+    const text = await response.text();
+    onChunk(text);
+    return;
   }
 
-  const reader = response.body.getReader();
+  const reader = (response.body as any).getReader();
 
   const decoder = new TextDecoder();
 
