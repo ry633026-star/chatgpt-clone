@@ -57,31 +57,50 @@ export async function createConversation(
 }
 
 export async function getConversations(): Promise<Conversation[]> {
-  const response = await authorizedFetch(`${API_URL}/api/chat/conversations`);
+  const token = await getToken();
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.detail || 'Failed to load conversations');
+  if (!token) {
+    throw new Error('Authentication required');
   }
 
-  return data;
+  const response = await fetch(`${API_URL}/api/chat/conversations`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to load conversations');
+  }
+
+  return response.json();
 }
 
 export async function getMessages(
   conversationId: string,
 ): Promise<ChatMessage[]> {
-  const response = await authorizedFetch(
-    `${API_URL}/api/chat/conversations/${conversationId}/messages`,
-  );
+  const token = await getToken();
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.detail || 'Failed to load messages');
+  if (!token) {
+    throw new Error('Authentication required');
   }
 
-  return data;
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to load messages');
+  }
+
+  return response.json();
 }
 
 export async function sendMessage(
