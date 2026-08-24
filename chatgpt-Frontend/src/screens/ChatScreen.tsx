@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {
   createConversation,
+  streamMessage,
   getMessages,
   sendMessage as sendChatMessage,
 } from '../api/chatApi';
@@ -45,6 +46,7 @@ export default function ChatScreen({ userName, onLogout }: Props) {
 
     try {
       setSending(true);
+      setMessage('');
 
       let activeConversationId = conversationId;
 
@@ -56,19 +58,40 @@ export default function ChatScreen({ userName, onLogout }: Props) {
         setConversationId(activeConversationId);
       }
 
-      const result = await sendChatMessage(activeConversationId, text);
+      const userMessageId = `${Date.now()}-user`;
 
-      setMessages(
-        result.map(item => ({
-          id: item.id,
-          role: item.role === 'assistant' ? 'assistant' : 'user',
-          content: item.content,
-        })),
-      );
+      const assistantMessageId = `${Date.now()}-assistant`;
 
-      setMessage('');
+      setMessages(prev => [
+        ...prev,
+
+        {
+          id: userMessageId,
+          role: 'user',
+          content: text,
+        },
+
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: '',
+        },
+      ]);
+
+      await streamMessage(activeConversationId, text, chunk => {
+        setMessages(prev =>
+          prev.map(item =>
+            item.id === assistantMessageId
+              ? {
+                  ...item,
+                  content: item.content + chunk,
+                }
+              : item,
+          ),
+        );
+      });
     } catch (error) {
-      console.error(error);
+      console.error('Streaming error:', error);
     } finally {
       setSending(false);
     }
