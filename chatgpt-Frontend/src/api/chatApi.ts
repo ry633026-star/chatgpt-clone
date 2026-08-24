@@ -123,3 +123,60 @@ export async function deleteConversation(
     throw new Error(data?.detail || 'Failed to delete conversation');
   }
 }
+
+// streaming response
+export async function streamMessage(
+  conversationId: string,
+  content: string,
+  onChunk: (chunk: string) => void,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages/stream`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        content,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json();
+
+    throw new Error(data?.detail || 'Failed to stream message');
+  }
+
+  if (!response.body) {
+    throw new Error('Streaming is not supported by this client');
+  }
+
+  const reader = response.body.getReader();
+
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    const chunk = decoder.decode(value, {
+      stream: true,
+    });
+
+    if (chunk) {
+      onChunk(chunk);
+    }
+  }
+}
