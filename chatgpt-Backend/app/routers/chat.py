@@ -18,6 +18,7 @@ from app.schemas.chat import (
     ConversationResponse,
     MessageCreate,
     MessageResponse,
+    RenameConversationRequest,
 )
 
 # Use your existing JWT dependency here.
@@ -291,3 +292,49 @@ def stream_message(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# chat/conversation/rename
+@router.patch("/conversations/{conversation_id}")
+def rename_conversation(
+    conversation_id: uuid.UUID,
+    data: RenameConversationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    title = data.title.strip()
+
+    if not title:
+        raise HTTPException(
+            status_code=400,
+            detail="Title cannot be empty",
+        )
+
+    if len(title) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Title cannot exceed 100 characters",
+        )
+
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found",
+        )
+
+    conversation.title = title
+
+    db.commit()
+    db.refresh(conversation)
+
+    return {
+        "id": str(conversation.id),
+        "title": conversation.title,
+    }
