@@ -6,7 +6,7 @@ export interface Conversation {
   id: string;
   title: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface ChatMessage {
@@ -57,31 +57,50 @@ export async function createConversation(
 }
 
 export async function getConversations(): Promise<Conversation[]> {
-  const response = await authorizedFetch(`${API_URL}/api/chat/conversations`);
+  const token = await getToken();
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.detail || 'Failed to load conversations');
+  if (!token) {
+    throw new Error('Authentication required');
   }
 
-  return data;
+  const response = await fetch(`${API_URL}/api/chat/conversations`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to load conversations');
+  }
+
+  return response.json();
 }
 
 export async function getMessages(
   conversationId: string,
 ): Promise<ChatMessage[]> {
-  const response = await authorizedFetch(
-    `${API_URL}/api/chat/conversations/${conversationId}/messages`,
-  );
+  const token = await getToken();
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.detail || 'Failed to load messages');
+  if (!token) {
+    throw new Error('Authentication required');
   }
 
-  return data;
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to load messages');
+  }
+
+  return response.json();
 }
 
 export async function sendMessage(
@@ -121,5 +140,134 @@ export async function deleteConversation(
     const data = await response.json();
 
     throw new Error(data?.detail || 'Failed to delete conversation');
+  }
+}
+
+// streaming response with mobile fallback
+export async function streamMessage(
+  conversationId: string,
+  content: string,
+  onChunk: (chunk: string) => void,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  // Native React Native fetch (mobile) does not support response.body readable streams
+  const isStreamingSupported =
+    Platform.OS === 'web' && typeof globalThis.ReadableStream !== 'undefined';
+
+  if (!isStreamingSupported) {
+    const response = await fetch(
+      `${API_URL}/api/chat/conversations/${conversationId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          content,
+        }),
+      },
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.detail || 'Failed to send message');
+    }
+
+    const assistantMsg = Array.isArray(data)
+      ? data.find((m: any) => m.role === 'assistant')
+      : null;
+
+    if (assistantMsg && assistantMsg.content) {
+      onChunk(assistantMsg.content);
+    }
+    return;
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages/stream`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        content,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json();
+
+    throw new Error(data?.detail || 'Failed to stream message');
+  }
+
+  if (
+    !response.body ||
+    typeof (response.body as any).getReader !== 'function'
+  ) {
+    const text = await response.text();
+    onChunk(text);
+    return;
+  }
+
+  const reader = (response.body as any).getReader();
+
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    const chunk = decoder.decode(value, {
+      stream: true,
+    });
+
+    if (chunk) {
+      onChunk(chunk);
+    }
+  }
+}
+
+// chat/conversation/rename
+export async function renameConversation(
+  conversationId: string,
+  title: string,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        title,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json();
+
+    throw new Error(data?.detail || 'Failed to rename conversation');
   }
 }

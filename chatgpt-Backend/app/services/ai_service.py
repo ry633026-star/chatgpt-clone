@@ -1,14 +1,28 @@
-from app.core.config import OPENAI_API_KEY
+from app.services.local_ai_service import (
+    generate_local_response,
+)
 
 
 def generate_ai_response(
     messages: list[dict[str, str]],
 ) -> str:
 
-    if not OPENAI_API_KEY:
-        return "AI provider is not configured yet."
+    return generate_local_response(messages)
 
-    # OpenAI implementation will go here.
-    # Local Qwen implementation can be added here later.
 
-    return "AI provider is configured, " "but the model is not connected yet."
+from app.services.local_ai_service import (
+    generate_local_response,
+    stream_local_response,
+)
+
+
+def generate_ai_response(
+    messages: list[dict[str, str]],
+) -> str:
+    return generate_local_response(messages)
+
+
+def stream_ai_response(
+    messages: list[dict[str, str]],
+):
+    return stream_local_response(messages)

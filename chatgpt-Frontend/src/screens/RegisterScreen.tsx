@@ -9,6 +9,8 @@ import {
   View,
 } from 'react-native';
 
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { registerUser } from '../api/authApi';
 
 interface Props {
@@ -55,48 +57,50 @@ export default function RegisterScreen({ onRegistered }: Props) {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create account</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      <View style={styles.container}>
+        <Text style={styles.title}>Create account</Text>
 
-      <Text style={styles.subtitle}>Create your ChatGPT account</Text>
+        <Text style={styles.subtitle}>Create your ChatGPT account</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Name"
-        value={name}
-        onChangeText={setName}
-        autoCapitalize="words"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Name"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+        />
 
-      {loading ? (
-        <ActivityIndicator />
-      ) : (
-        <Button title="Create account" onPress={handleRegister} />
-      )}
+        {loading ? (
+          <ActivityIndicator />
+        ) : (
+          <Button title="Create account" onPress={handleRegister} />
+        )}
 
-      <View style={styles.login}>
-        <Text>Already have an account?</Text>
+        <View style={styles.login}>
+          <Text>Already have an account?</Text>
 
-        <Button title="Login" onPress={onRegistered} />
+          <Button title="Login" onPress={onRegistered} />
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
