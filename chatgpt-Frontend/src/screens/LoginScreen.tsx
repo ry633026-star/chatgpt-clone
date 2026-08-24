@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useAuth } from '../auth/AuthContext';
 
 interface Props {
@@ -49,7 +51,8 @@ export default function LoginScreen({ onRegister }: Props) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      <View style={styles.container}>
       <Text style={styles.logo}>ChatGPT</Text>
 
       <Text style={styles.title}>Welcome back</Text>
@@ -86,7 +89,8 @@ export default function LoginScreen({ onRegister }: Props) {
         <Button title="Create account" onPress={onRegister} />
       </View>
     </View>
-  );
+  </SafeAreaView>
+);
 }
 
 const styles = StyleSheet.create({
