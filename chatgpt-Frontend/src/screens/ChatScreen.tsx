@@ -163,6 +163,21 @@ export default function ChatScreen({ userName, onLogout }: Props) {
             }}
           >
             <Text style={styles.newChatText}>+ New chat</Text>
+            <View>
+              {conversations.map(conversation => (
+                <Pressable
+                  key={conversation.id}
+                  onPress={() => {
+                    setConversationId(conversation.id);
+                  }}
+                  style={{
+                    padding: 12,
+                  }}
+                >
+                  <Text numberOfLines={1}>{conversation.title}</Text>
+                </Pressable>
+              ))}
+            </View>
           </Pressable>
 
           <View style={styles.sidebarSpacer} />
