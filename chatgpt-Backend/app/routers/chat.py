@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 from app.services.ai_service import (
     stream_ai_response,
 )
+from threading import Event
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -30,6 +31,8 @@ router = APIRouter(
     prefix="/api/chat",
     tags=["Chat"],
 )
+# To keep track of running AI generation for each conversation (for stop functionality)
+active_generations: dict[str, Event] = {}
 
 
 @router.post(
@@ -218,6 +221,12 @@ def stream_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    stop_event = Event()
+
+    generation_key = str(conversation.id)
+
+    active_generations[generation_key] = stop_event
+
     content = data.content.strip()
 
     if not content:
@@ -266,23 +275,29 @@ def stream_message(
         full_response = ""
 
         try:
-            for chunk in stream_ai_response(ai_messages):
+            for chunk in stream_ai_response(
+                ai_messages,
+                stop_event,
+            ):
                 full_response += chunk
-
                 yield chunk
 
-            assistant_message = Message(
-                conversation_id=conversation.id,
-                role="assistant",
-                content=full_response,
-            )
+            if full_response:
+                assistant_message = Message(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=full_response,
+                )
 
-            db.add(assistant_message)
-            db.commit()
+                db.add(assistant_message)
+                db.commit()
 
         except Exception as exc:
             db.rollback()
             print(f"Streaming AI error: {exc}")
+
+        finally:
+            active_generations.pop(generation_key, None)
 
     return StreamingResponse(
         generate(),
@@ -292,6 +307,36 @@ def stream_message(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# stop generation
+@router.post("/conversations/{conversation_id}/messages/stop")
+def stop_message_generation(
+    conversation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found",
+        )
+
+    generation_key = str(conversation.id)
+
+    stop_event = active_generations.get(generation_key)
+
+    if stop_event:
+        stop_event.set()
+
+    return {"message": "Generation stopped"}
 
 
 # chat/conversation/rename
