@@ -39,6 +39,19 @@ export default function ChatScreen({ userName, onLogout }: Props) {
 
   const [messages, setMessages] = useState<Message[]>([]);
 
+  // open conversation
+  const openConversation = async (id: string) => {
+    try {
+      setConversationId(id);
+
+      const messages = await getMessages(id);
+
+      setMessages(messages);
+    } catch (error) {
+      console.error('Failed to load conversation:', error);
+    }
+  };
+
   const sendMessage = async () => {
     const text = message.trim();
 
@@ -168,7 +181,7 @@ export default function ChatScreen({ userName, onLogout }: Props) {
                 <Pressable
                   key={conversation.id}
                   onPress={() => {
-                    setConversationId(conversation.id);
+                    openConversation(conversation.id);
                   }}
                   style={{
                     padding: 12,
