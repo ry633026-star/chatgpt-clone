@@ -24,6 +24,7 @@ import {
   getMessages,
   deleteConversation,
   renameConversation,
+  stopMessageGeneration,
 } from '../api/chatApi';
 
 interface Props {
@@ -52,6 +53,8 @@ export default function ChatScreen({ userName, onLogout }: Props) {
 
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState('');
+
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Automatically update sidebar state when resizing between mobile & desktop
   useEffect(() => {
@@ -216,6 +219,21 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       console.error('Streaming error:', error);
     } finally {
       setSending(false);
+    }
+  };
+
+  // stop message generation
+  const stopGeneration = async () => {
+    if (!conversationId) {
+      return;
+    }
+
+    try {
+      await stopMessageGeneration(conversationId);
+    } catch (error) {
+      console.error('Failed to stop generation:', error);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -477,13 +495,15 @@ export default function ChatScreen({ userName, onLogout }: Props) {
                   styles.sendButton,
                   (!message.trim() || sending) && styles.sendButtonDisabled,
                 ]}
-                onPress={sendMessage}
+                onPress={isGenerating ? stopGeneration : sendMessage}
                 disabled={!message.trim() || sending}
               >
-                {sending ? (
+                {isGenerating ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.sendText}>↑</Text>
+                  <Text style={styles.sendText}>
+                    {isGenerating ? '■' : '↑'}
+                  </Text>
                 )}
               </Pressable>
             </View>
