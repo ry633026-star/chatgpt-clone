@@ -122,7 +122,7 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       let activeConversationId = conversationId;
 
       if (!activeConversationId) {
-        const newConv = await createConversation(text.slice(0, 30));
+        const newConv = await createConversation(generateChatTitle(text));
         activeConversationId = newConv.id;
         setConversationId(activeConversationId);
         loadConversations();
@@ -162,6 +162,21 @@ export default function ChatScreen({ userName, onLogout }: Props) {
     } finally {
       setSending(false);
     }
+  };
+
+  // generate title for chat using AI
+  const generateChatTitle = (text: string) => {
+    const cleaned = text.replace(/\s+/g, ' ').trim();
+
+    if (!cleaned) {
+      return 'New chat';
+    }
+
+    if (cleaned.length <= 40) {
+      return cleaned;
+    }
+
+    return `${cleaned.slice(0, 40)}...`;
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -245,7 +260,11 @@ export default function ChatScreen({ userName, onLogout }: Props) {
               </Pressable>
               <Pressable
                 style={styles.deleteButton}
-                onPress={() => handleDeleteConversation(conv.id)}
+                onPress={() => {
+                  if (window.confirm('Delete this conversation?')) {
+                    handleDeleteConversation(conv.id);
+                  }
+                }}
               >
                 <Text style={styles.deleteText}>✕</Text>
               </Pressable>
@@ -267,7 +286,10 @@ export default function ChatScreen({ userName, onLogout }: Props) {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView
+      style={styles.safeArea}
+      edges={['top', 'left', 'right', 'bottom']}
+    >
       <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView
         style={styles.container}
