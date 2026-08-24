@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import {
   createConversation,
+  getConversations,
+  Conversation,
   streamMessage,
   getMessages,
   sendMessage as sendChatMessage,
@@ -94,6 +96,22 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       console.error('Streaming error:', error);
     } finally {
       setSending(false);
+    }
+  };
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  const loadConversations = async () => {
+    try {
+      const data = await getConversations();
+
+      setConversations(data);
+    } catch (error) {
+      console.error('Failed to load conversations:', error);
     }
   };
 
