@@ -11,6 +11,8 @@ import {
   Text,
   TextInput,
   View,
+  Modal,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,6 +49,9 @@ export default function ChatScreen({ userName, onLogout }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
   const [loadingMessages, setLoadingMessages] = useState(false);
+
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState('');
 
   // Automatically update sidebar state when resizing between mobile & desktop
   useEffect(() => {
@@ -106,6 +111,11 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       setConversations(prev => prev.filter(c => c.id !== id));
     } catch (error) {
       console.error('Failed to delete conversation:', error);
+      if (Platform.OS === 'web') {
+        window.alert('Failed to delete conversation.');
+      } else {
+        Alert.alert('Error', 'Failed to delete conversation.');
+      }
     }
   };
   // chat/conversation/rename
@@ -115,25 +125,28 @@ export default function ChatScreen({ userName, onLogout }: Props) {
     if (!conversation) {
       return;
     }
-
-    const newTitle = window.prompt('Enter new chat title:', conversation.title);
-
-    if (newTitle === null) {
+    setRenameId(id);
+    setRenameText(conversation.title);
+  };
+  // save rename conversation
+  const saveRenameConversation = async () => {
+    if (!renameId) {
       return;
     }
 
-    const title = newTitle.trim();
+    const title = renameText.trim();
 
     if (!title) {
+      Alert.alert('Invalid title', 'Title cannot be empty.');
       return;
     }
 
     try {
-      await renameConversation(id, title);
+      await renameConversation(renameId, title);
 
       setConversations(previous =>
         previous.map(item =>
-          item.id === id
+          item.id === renameId
             ? {
                 ...item,
                 title,
@@ -141,11 +154,15 @@ export default function ChatScreen({ userName, onLogout }: Props) {
             : item,
         ),
       );
+
+      setRenameId(null);
+      setRenameText('');
     } catch (error) {
       console.error('Failed to rename conversation:', error);
+
+      Alert.alert('Error', 'Failed to rename conversation.');
     }
   };
-
   const sendMessage = async () => {
     const text = message.trim();
 
@@ -245,6 +262,35 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       </View>
     );
   };
+  //delete conversation
+  const confirmDeleteConversation = (id: string) => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        'Are you sure you want to delete this conversation?',
+      );
+      if (confirmed) {
+        handleDeleteConversation(id);
+      }
+    } else {
+      Alert.alert(
+        'Delete conversation',
+        'Are you sure you want to delete this conversation?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              handleDeleteConversation(id);
+            },
+          },
+        ],
+      );
+    }
+  };
 
   const activeConv = conversations.find(c => c.id === conversationId);
   const headerTitle = activeConv ? activeConv.title : 'New chat';
@@ -296,12 +342,21 @@ export default function ChatScreen({ userName, onLogout }: Props) {
                   {conv.title || 'Untitled Chat'}
                 </Text>
               </Pressable>
+              {/* Rename button */}
+              <Pressable
+                style={styles.renameButton}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={() => {
+                  handleRenameConversation(conv.id);
+                }}
+              >
+                <Text style={styles.renameText}>✎</Text>
+              </Pressable>
               <Pressable
                 style={styles.deleteButton}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={() => {
-                  if (window.confirm('Delete this conversation?')) {
-                    handleDeleteConversation(conv.id);
-                  }
+                  confirmDeleteConversation(conv.id);
                 }}
               >
                 <Text style={styles.deleteText}>✕</Text>
@@ -437,6 +492,108 @@ export default function ChatScreen({ userName, onLogout }: Props) {
               ChatGPT can make mistakes. Check important information.
             </Text>
           </View>
+          <Modal
+            visible={renameId !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => {
+              setRenameId(null);
+              setRenameText('');
+            }}
+          >
+            <View
+              style={{
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                padding: 20,
+              }}
+            >
+              <View
+                style={{
+                  width: '100%',
+                  maxWidth: 420,
+                  backgroundColor: '#202123',
+                  borderRadius: 12,
+                  padding: 20,
+                }}
+              >
+                <Text
+                  style={{
+                    color: '#fff',
+                    fontSize: 20,
+                    fontWeight: '600',
+                    marginBottom: 16,
+                  }}
+                >
+                  Rename conversation
+                </Text>
+
+                <TextInput
+                  value={renameText}
+                  onChangeText={setRenameText}
+                  autoFocus
+                  maxLength={100}
+                  placeholder="Conversation title"
+                  placeholderTextColor="#888"
+                  style={{
+                    color: '#fff',
+                    borderWidth: 1,
+                    borderColor: '#555',
+                    borderRadius: 8,
+                    padding: 12,
+                    marginBottom: 16,
+                  }}
+                />
+
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'flex-end',
+                  }}
+                >
+                  <Pressable
+                    onPress={() => {
+                      setRenameId(null);
+                      setRenameText('');
+                    }}
+                    style={{
+                      padding: 12,
+                      marginRight: 8,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: '#ccc',
+                      }}
+                    >
+                      Cancel
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={saveRenameConversation}
+                    style={{
+                      backgroundColor: '#10a37f',
+                      paddingVertical: 12,
+                      paddingHorizontal: 18,
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: '#fff',
+                        fontWeight: '600',
+                      }}
+                    >
+                      Save
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -575,7 +732,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000',
   },
-
+  renameButton: {
+    padding: 4,
+    marginRight: 4,
+  },
+  renameText: {
+    fontSize: 12,
+    color: '#666',
+  },
   deleteButton: {
     padding: 4,
     opacity: 0.6,
