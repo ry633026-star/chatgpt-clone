@@ -157,8 +157,7 @@ export async function streamMessage(
 
   // Native React Native fetch (mobile) does not support response.body readable streams
   const isStreamingSupported =
-    Platform.OS === 'web' &&
-    typeof globalThis.ReadableStream !== 'undefined';
+    Platform.OS === 'web' && typeof globalThis.ReadableStream !== 'undefined';
 
   if (!isStreamingSupported) {
     const response = await fetch(
@@ -211,7 +210,10 @@ export async function streamMessage(
     throw new Error(data?.detail || 'Failed to stream message');
   }
 
-  if (!response.body || typeof (response.body as any).getReader !== 'function') {
+  if (
+    !response.body ||
+    typeof (response.body as any).getReader !== 'function'
+  ) {
     const text = await response.text();
     onChunk(text);
     return;
@@ -235,5 +237,37 @@ export async function streamMessage(
     if (chunk) {
       onChunk(chunk);
     }
+  }
+}
+
+// chat/conversation/rename
+export async function renameConversation(
+  conversationId: string,
+  title: string,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        title,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json();
+
+    throw new Error(data?.detail || 'Failed to rename conversation');
   }
 }

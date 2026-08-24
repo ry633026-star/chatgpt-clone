@@ -21,6 +21,7 @@ import {
   streamMessage,
   getMessages,
   deleteConversation,
+  renameConversation,
 } from '../api/chatApi';
 
 interface Props {
@@ -105,6 +106,43 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       setConversations(prev => prev.filter(c => c.id !== id));
     } catch (error) {
       console.error('Failed to delete conversation:', error);
+    }
+  };
+  // chat/conversation/rename
+  const handleRenameConversation = async (id: string) => {
+    const conversation = conversations.find(item => item.id === id);
+
+    if (!conversation) {
+      return;
+    }
+
+    const newTitle = window.prompt('Enter new chat title:', conversation.title);
+
+    if (newTitle === null) {
+      return;
+    }
+
+    const title = newTitle.trim();
+
+    if (!title) {
+      return;
+    }
+
+    try {
+      await renameConversation(id, title);
+
+      setConversations(previous =>
+        previous.map(item =>
+          item.id === id
+            ? {
+                ...item,
+                title,
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      console.error('Failed to rename conversation:', error);
     }
   };
 
