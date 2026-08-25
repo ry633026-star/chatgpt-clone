@@ -20,6 +20,7 @@ from app.schemas.chat import (
     MessageCreate,
     MessageResponse,
     RenameConversationRequest,
+    EditMessageRequest,
 )
 
 # Use your existing JWT dependency here.
@@ -501,3 +502,58 @@ def regenerate_message(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# edit message
+@router.patch("/conversations/{conversation_id}/messages/{message_id}")
+def edit_message(
+    conversation_id: uuid.UUID,
+    message_id: uuid.UUID,
+    data: EditMessageRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    content = data.content.strip()
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="Message cannot be empty",
+        )
+
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found",
+        )
+
+    message = db.scalar(
+        select(Message).where(
+            Message.id == message_id,
+            Message.conversation_id == conversation.id,
+            Message.role == "user",
+        )
+    )
+
+    if not message:
+        raise HTTPException(
+            status_code=404,
+            detail="User message not found",
+        )
+
+    message.content = content
+
+    db.commit()
+    db.refresh(message)
+
+    return {
+        "id": str(message.id),
+        "content": message.content,
+    }

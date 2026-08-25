@@ -37,3 +37,7 @@ class MessageResponse(BaseModel):
 
 class RenameConversationRequest(BaseModel):
     title: str
+
+
+class EditMessageRequest(BaseModel):
+    content: str
