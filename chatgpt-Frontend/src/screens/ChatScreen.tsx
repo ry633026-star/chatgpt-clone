@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -43,6 +43,8 @@ export default function ChatScreen({ userName, onLogout }: Props) {
   const isMobile = width < 768;
 
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const activeConversationIdRef = useRef<string | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -55,6 +57,10 @@ export default function ChatScreen({ userName, onLogout }: Props) {
   const [renameText, setRenameText] = useState('');
 
   const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    activeConversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   // Automatically update sidebar state when resizing between mobile & desktop
   useEffect(() => {
@@ -169,12 +175,13 @@ export default function ChatScreen({ userName, onLogout }: Props) {
   const sendMessage = async () => {
     const text = message.trim();
 
-    if (!text || sending) {
+    if (!text || sending || isGenerating) {
       return;
     }
 
     try {
       setSending(true);
+      setIsGenerating(true);
       setMessage('');
 
       let activeConversationId = conversationId;
@@ -182,6 +189,7 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       if (!activeConversationId) {
         const newConv = await createConversation(generateChatTitle(text));
         activeConversationId = newConv.id;
+        activeConversationIdRef.current = activeConversationId;
         setConversationId(activeConversationId);
         loadConversations();
       }
@@ -219,17 +227,19 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       console.error('Streaming error:', error);
     } finally {
       setSending(false);
+      setIsGenerating(false);
     }
   };
 
   // stop message generation
   const stopGeneration = async () => {
-    if (!conversationId) {
+    const targetId = activeConversationIdRef.current || conversationId;
+    if (!targetId) {
       return;
     }
 
     try {
-      await stopMessageGeneration(conversationId);
+      await stopMessageGeneration(targetId);
     } catch (error) {
       console.error('Failed to stop generation:', error);
     } finally {
@@ -493,18 +503,18 @@ export default function ChatScreen({ userName, onLogout }: Props) {
               <Pressable
                 style={[
                   styles.sendButton,
-                  (!message.trim() || sending) && styles.sendButtonDisabled,
+                  !isGenerating &&
+                    (!message.trim() || sending) &&
+                    styles.sendButtonDisabled,
                 ]}
                 onPress={isGenerating ? stopGeneration : sendMessage}
-                disabled={!message.trim() || sending}
+                disabled={!isGenerating && (!message.trim() || sending)}
               >
-                {isGenerating ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.sendText}>
-                    {isGenerating ? '■' : '↑'}
-                  </Text>
-                )}
+                <Text
+                  style={[styles.sendText, isGenerating && { fontSize: 14 }]}
+                >
+                  {isGenerating ? '■' : '↑'}
+                </Text>
               </Pressable>
             </View>
 
