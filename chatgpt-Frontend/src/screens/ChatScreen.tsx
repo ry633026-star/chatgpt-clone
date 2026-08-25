@@ -26,6 +26,7 @@ import {
   renameConversation,
   stopMessageGeneration,
   regenerateMessage,
+  editMessage,
 } from '../api/chatApi';
 
 interface Props {
@@ -58,6 +59,10 @@ export default function ChatScreen({ userName, onLogout }: Props) {
   const [renameText, setRenameText] = useState('');
 
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+
+  const [editingText, setEditingText] = useState('');
 
   useEffect(() => {
     activeConversationIdRef.current = conversationId;
@@ -263,8 +268,86 @@ export default function ChatScreen({ userName, onLogout }: Props) {
     return `${cleaned.slice(0, 40)}...`;
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isUser = item.role === 'user';
+    const isEditing = editingMessageId === item.id;
+
+    if (isEditing) {
+      return (
+        <View
+          style={[
+            styles.messageRow,
+            isUser ? styles.userRow : styles.assistantRow,
+          ]}
+        >
+          <View
+            style={[
+              styles.messageBubble,
+              styles.userBubble,
+              { width: '100%', maxWidth: 600, padding: 12 },
+            ]}
+          >
+            <TextInput
+              value={editingText}
+              onChangeText={setEditingText}
+              multiline
+              autoFocus
+              style={[
+                styles.messageText,
+                styles.userText,
+                {
+                  backgroundColor: '#fff',
+                  borderWidth: 1,
+                  borderColor: '#d1d1d1',
+                  borderRadius: 8,
+                  padding: 10,
+                  marginBottom: 10,
+                  minHeight: 60,
+                },
+              ]}
+            />
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                gap: 8,
+              }}
+            >
+              <Pressable
+                onPress={cancelEditing}
+                style={{
+                  paddingVertical: 6,
+                  paddingHorizontal: 12,
+                  borderRadius: 6,
+                  backgroundColor: '#e5e5e5',
+                }}
+              >
+                <Text
+                  style={{ color: '#333', fontSize: 13, fontWeight: '500' }}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={saveEditedMessage}
+                style={{
+                  paddingVertical: 6,
+                  paddingHorizontal: 12,
+                  borderRadius: 6,
+                  backgroundColor: '#10a37f',
+                }}
+              >
+                <Text
+                  style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}
+                >
+                  Save & Submit
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      );
+    }
 
     return (
       <View
@@ -287,6 +370,29 @@ export default function ChatScreen({ userName, onLogout }: Props) {
           >
             {item.content}
           </Text>
+          {item.role === 'user' && (
+            <Pressable
+              onPress={() => startEditingMessage(item.id, item.content)}
+              style={{
+                padding: 6,
+              }}
+            >
+              <Text>✏️</Text>
+            </Pressable>
+          )}
+          {item.role === 'assistant' &&
+            index === messages.length - 1 &&
+            !isGenerating && (
+              <Pressable
+                onPress={regenerateResponse}
+                style={{
+                  padding: 8,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <Text>🔄 Regenerate</Text>
+              </Pressable>
+            )}
         </View>
       </View>
     );
@@ -371,6 +477,51 @@ export default function ChatScreen({ userName, onLogout }: Props) {
           },
         ],
       );
+    }
+  };
+
+  //start editing message
+  const startEditingMessage = (messageId: string, content: string) => {
+    setEditingMessageId(messageId);
+    setEditingText(content);
+  };
+  //cancel editing message
+  const cancelEditing = () => {
+    setEditingMessageId(null);
+    setEditingText('');
+  };
+  //save edited message
+  const saveEditedMessage = async () => {
+    if (!conversationId || !editingMessageId) {
+      return;
+    }
+
+    const content = editingText.trim();
+
+    if (!content) {
+      return;
+    }
+
+    try {
+      await editMessage(conversationId, editingMessageId, content);
+
+      setMessages(previous =>
+        previous.map(item =>
+          item.id === editingMessageId
+            ? {
+                ...item,
+                content,
+              }
+            : item,
+        ),
+      );
+
+      setEditingMessageId(null);
+      setEditingText('');
+
+      await regenerateResponse();
+    } catch (error) {
+      console.error('Edit message error:', error);
     }
   };
 

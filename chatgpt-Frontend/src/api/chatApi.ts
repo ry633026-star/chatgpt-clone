@@ -297,6 +297,39 @@ export async function stopMessageGeneration(
   }
 }
 
+// edit message
+export async function editMessage(
+  conversationId: string,
+  messageId: string,
+  content: string,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages/${messageId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        content,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json();
+
+    throw new Error(data?.detail || 'Failed to edit message');
+  }
+}
+
 // regenerate message
 export async function regenerateMessage(
   conversationId: string,
