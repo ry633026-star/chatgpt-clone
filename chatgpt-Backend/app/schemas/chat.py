@@ -28,6 +28,7 @@ class MessageResponse(BaseModel):
     conversation_id: uuid.UUID
     role: str
     content: str
+    position: int = 0
     created_at: datetime
 
     model_config = ConfigDict(
