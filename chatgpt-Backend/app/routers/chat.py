@@ -381,3 +381,123 @@ def rename_conversation(
         "id": str(conversation.id),
         "title": conversation.title,
     }
+
+
+# chat/conversation/regenerate
+@router.post("/conversations/{conversation_id}/messages/regenerate")
+def regenerate_message(
+    conversation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found",
+        )
+
+    messages = db.scalars(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.asc())
+    ).all()
+
+    if not messages:
+        raise HTTPException(
+            status_code=400,
+            detail="No messages to regenerate",
+        )
+
+    # Find the latest user message
+    latest_user_message = next(
+        (message for message in reversed(messages) if message.role == "user"),
+        None,
+    )
+
+    if not latest_user_message:
+        raise HTTPException(
+            status_code=400,
+            detail="No user message found",
+        )
+
+    # Remove the latest assistant response
+    latest_assistant = next(
+        (
+            message
+            for message in reversed(messages)
+            if message.role == "assistant"
+            and message.created_at > latest_user_message.created_at
+        ),
+        None,
+    )
+
+    if latest_assistant:
+        db.delete(latest_assistant)
+        db.commit()
+
+    remaining_messages = db.scalars(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.asc())
+    ).all()
+
+    ai_messages = [
+        {
+            "role": message.role,
+            "content": message.content,
+        }
+        for message in remaining_messages
+    ]
+
+    stop_event = Event()
+
+    generation_key = str(conversation.id)
+
+    active_generations[generation_key] = stop_event
+
+    def generate():
+        full_response = ""
+
+        try:
+            for chunk in stream_ai_response(
+                ai_messages,
+                stop_event,
+            ):
+                full_response += chunk
+                yield chunk
+
+            if full_response:
+                assistant_message = Message(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=full_response,
+                )
+
+                db.add(assistant_message)
+                db.commit()
+
+        except Exception as exc:
+            db.rollback()
+            print(f"Regeneration error: {exc}")
+
+        finally:
+            active_generations.pop(
+                generation_key,
+                None,
+            )
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
