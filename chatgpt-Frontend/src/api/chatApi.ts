@@ -271,3 +271,28 @@ export async function renameConversation(
     throw new Error(data?.detail || 'Failed to rename conversation');
   }
 }
+
+// stop message generation
+export async function stopMessageGeneration(
+  conversationId: string,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages/stop`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to stop generation');
+  }
+}

@@ -5,9 +5,9 @@ from transformers import (
     AutoTokenizer,
 )
 
-from threading import Thread
+from threading import Thread, Event
 
-from transformers import TextIteratorStreamer
+from transformers import TextIteratorStreamer, StoppingCriteria
 
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
@@ -67,6 +67,7 @@ def generate_local_response(
 
 def stream_local_response(
     messages: list[dict[str, str]],
+    stop_event: Event,
 ):
     prompt = tokenizer.apply_chat_template(
         messages,
@@ -85,6 +86,8 @@ def stream_local_response(
         skip_special_tokens=True,
     )
 
+    stopping_criteria = [StopGenerationCriteria(stop_event)]
+
     generation_kwargs = {
         **inputs,
         "streamer": streamer,
@@ -92,6 +95,7 @@ def stream_local_response(
         "temperature": 0.7,
         "do_sample": True,
         "top_p": 0.9,
+        "stopping_criteria": stopping_criteria,
     }
 
     thread = Thread(
@@ -101,8 +105,31 @@ def stream_local_response(
 
     thread.start()
 
-    for text in streamer:
-        if text:
-            yield text
+    try:
+        for text in streamer:
 
-    thread.join()
+            if stop_event.is_set():
+                break
+
+            if text:
+                yield text
+
+    finally:
+        stop_event.set()
+
+        if thread.is_alive():
+            thread.join(timeout=2)
+
+
+# stop criteria
+class StopGenerationCriteria(StoppingCriteria):
+    def __init__(self, stop_event: Event):
+        self.stop_event = stop_event
+
+    def __call__(
+        self,
+        input_ids,
+        scores,
+        **kwargs,
+    ):
+        return self.stop_event.is_set()
