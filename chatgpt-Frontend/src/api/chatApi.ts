@@ -296,3 +296,55 @@ export async function stopMessageGeneration(
     throw new Error('Failed to stop generation');
   }
 }
+
+// regenerate message
+export async function regenerateMessage(
+  conversationId: string,
+  onChunk: (chunk: string) => void,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages/regenerate`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json();
+
+    throw new Error(data?.detail || 'Failed to regenerate response');
+  }
+
+  if (!response.body) {
+    throw new Error('Streaming is not supported');
+  }
+
+  const reader = response.body.getReader();
+
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    const chunk = decoder.decode(value, {
+      stream: true,
+    });
+
+    if (chunk) {
+      onChunk(chunk);
+    }
+  }
+}

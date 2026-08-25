@@ -25,6 +25,7 @@ import {
   deleteConversation,
   renameConversation,
   stopMessageGeneration,
+  regenerateMessage,
 } from '../api/chatApi';
 
 interface Props {
@@ -289,6 +290,59 @@ export default function ChatScreen({ userName, onLogout }: Props) {
         </View>
       </View>
     );
+  };
+  // regenerate response
+  const regenerateResponse = async () => {
+    if (!conversationId || isGenerating) {
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+
+      const assistantId = `${Date.now()}-regenerated`;
+
+      setMessages(previous => {
+        const lastAssistantIndex = [...previous]
+          .map((item, index) => ({
+            item,
+            index,
+          }))
+          .reverse()
+          .find(({ item }) => item.role === 'assistant')?.index;
+
+        if (lastAssistantIndex === undefined) {
+          return previous;
+        }
+
+        return previous.map((item, index) =>
+          index === lastAssistantIndex
+            ? {
+                ...item,
+                id: assistantId,
+                content: '',
+              }
+            : item,
+        );
+      });
+
+      await regenerateMessage(conversationId, chunk => {
+        setMessages(previous =>
+          previous.map(item =>
+            item.id === assistantId
+              ? {
+                  ...item,
+                  content: item.content + chunk,
+                }
+              : item,
+          ),
+        );
+      });
+    } catch (error) {
+      console.error('Regenerate error:', error);
+    } finally {
+      setIsGenerating(false);
+    }
   };
   //delete conversation
   const confirmDeleteConversation = (id: string) => {
