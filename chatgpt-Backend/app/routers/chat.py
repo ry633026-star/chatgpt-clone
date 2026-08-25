@@ -221,12 +221,6 @@ def stream_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    stop_event = Event()
-
-    generation_key = str(conversation.id)
-
-    active_generations[generation_key] = stop_event
-
     content = data.content.strip()
 
     if not content:
@@ -247,6 +241,10 @@ def stream_message(
             status_code=404,
             detail="Conversation not found",
         )
+
+    stop_event = Event()
+    generation_key = str(conversation.id)
+    active_generations[generation_key] = stop_event
 
     user_message = Message(
         conversation_id=conversation.id,
