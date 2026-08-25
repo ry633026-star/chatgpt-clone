@@ -27,6 +27,7 @@ import {
   stopMessageGeneration,
   regenerateMessage,
   editMessage,
+  editAndResendMessage,
 } from '../api/chatApi';
 
 interface Props {
@@ -248,6 +249,74 @@ export default function ChatScreen({ userName, onLogout }: Props) {
       await stopMessageGeneration(targetId);
     } catch (error) {
       console.error('Failed to stop generation:', error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+  //save edited message
+  const saveEditedMessage = async () => {
+    if (!conversationId || !editingMessageId) {
+      return;
+    }
+
+    const content = editingText.trim();
+
+    if (!content) {
+      return;
+    }
+
+    const editedId = editingMessageId;
+
+    try {
+      setIsGenerating(true);
+
+      // Update the user message locally
+      // and remove everything after it.
+      setMessages(previous => {
+        const index = previous.findIndex(item => item.id === editedId);
+
+        if (index === -1) {
+          return previous;
+        }
+
+        return [
+          ...previous.slice(0, index),
+          {
+            ...previous[index],
+            content,
+          },
+        ];
+      });
+
+      setEditingMessageId(null);
+      setEditingText('');
+
+      // Create temporary assistant message
+      const assistantId = `assistant-${Date.now()}`;
+
+      setMessages(previous => [
+        ...previous,
+        {
+          id: assistantId,
+          role: 'assistant',
+          content: '',
+        },
+      ]);
+
+      await editAndResendMessage(conversationId, editedId, content, chunk => {
+        setMessages(previous =>
+          previous.map(item =>
+            item.id === assistantId
+              ? {
+                  ...item,
+                  content: item.content + chunk,
+                }
+              : item,
+          ),
+        );
+      });
+    } catch (error) {
+      console.error('Edit and resend error:', error);
     } finally {
       setIsGenerating(false);
     }
@@ -489,40 +558,6 @@ export default function ChatScreen({ userName, onLogout }: Props) {
   const cancelEditing = () => {
     setEditingMessageId(null);
     setEditingText('');
-  };
-  //save edited message
-  const saveEditedMessage = async () => {
-    if (!conversationId || !editingMessageId) {
-      return;
-    }
-
-    const content = editingText.trim();
-
-    if (!content) {
-      return;
-    }
-
-    try {
-      await editMessage(conversationId, editingMessageId, content);
-
-      setMessages(previous =>
-        previous.map(item =>
-          item.id === editingMessageId
-            ? {
-                ...item,
-                content,
-              }
-            : item,
-        ),
-      );
-
-      setEditingMessageId(null);
-      setEditingText('');
-
-      await regenerateResponse();
-    } catch (error) {
-      console.error('Edit message error:', error);
-    }
   };
 
   const activeConv = conversations.find(c => c.id === conversationId);
