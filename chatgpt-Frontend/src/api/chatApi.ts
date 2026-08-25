@@ -14,6 +14,7 @@ export interface ChatMessage {
   conversation_id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  position?: number;
   created_at: string;
 }
 
@@ -294,5 +295,146 @@ export async function stopMessageGeneration(
 
   if (!response.ok) {
     throw new Error('Failed to stop generation');
+  }
+}
+
+// edit message
+export async function editMessage(
+  conversationId: string,
+  messageId: string,
+  content: string,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages/${messageId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        content,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json();
+
+    throw new Error(data?.detail || 'Failed to edit message');
+  }
+}
+// chat/conversation/messages/edit-resend
+export async function editAndResendMessage(
+  conversationId: string,
+  messageId: string,
+  content: string,
+  onChunk: (chunk: string) => void,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages/${messageId}/edit-resend`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        content,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json();
+
+    throw new Error(data?.detail || 'Failed to edit message');
+  }
+
+  if (!response.body) {
+    throw new Error('Streaming is not supported');
+  }
+
+  const reader = response.body.getReader();
+
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    const chunk = decoder.decode(value, {
+      stream: true,
+    });
+
+    if (chunk) {
+      onChunk(chunk);
+    }
+  }
+}
+// regenerate message
+export async function regenerateMessage(
+  conversationId: string,
+  onChunk: (chunk: string) => void,
+): Promise<void> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/chat/conversations/${conversationId}/messages/regenerate`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json();
+
+    throw new Error(data?.detail || 'Failed to regenerate response');
+  }
+
+  if (!response.body) {
+    throw new Error('Streaming is not supported');
+  }
+
+  const reader = response.body.getReader();
+
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    const chunk = decoder.decode(value, {
+      stream: true,
+    });
+
+    if (chunk) {
+      onChunk(chunk);
+    }
   }
 }

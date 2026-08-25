@@ -8,7 +8,7 @@ from app.services.ai_service import (
 from threading import Event
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -20,6 +20,7 @@ from app.schemas.chat import (
     MessageCreate,
     MessageResponse,
     RenameConversationRequest,
+    EditMessageRequest,
 )
 
 # Use your existing JWT dependency here.
@@ -33,6 +34,15 @@ router = APIRouter(
 )
 # To keep track of running AI generation for each conversation (for stop functionality)
 active_generations: dict[str, Event] = {}
+
+
+def get_next_position(db: Session, conversation_id: uuid.UUID) -> int:
+    max_pos = db.scalar(
+        select(func.max(Message.position)).where(
+            Message.conversation_id == conversation_id
+        )
+    )
+    return (max_pos + 1) if max_pos is not None else 0
 
 
 @router.post(
@@ -129,10 +139,13 @@ def send_message(
             detail="Conversation not found",
         )
 
+    next_pos = get_next_position(db, conversation.id)
+
     user_message = Message(
         conversation_id=conversation.id,
         role="user",
         content=content,
+        position=next_pos,
     )
 
     db.add(user_message)
@@ -141,7 +154,7 @@ def send_message(
     previous_messages = db.scalars(
         select(Message)
         .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.position.asc(), Message.created_at.asc())
     ).all()
 
     ai_messages = [
@@ -167,6 +180,7 @@ def send_message(
         conversation_id=conversation.id,
         role="assistant",
         content=assistant_content,
+        position=next_pos + 1,
     )
 
     db.add(assistant_message)
@@ -207,7 +221,7 @@ def get_messages(
     messages = db.scalars(
         select(Message)
         .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.position.asc(), Message.created_at.asc())
     ).all()
 
     return messages
@@ -246,10 +260,13 @@ def stream_message(
     generation_key = str(conversation.id)
     active_generations[generation_key] = stop_event
 
+    next_pos = get_next_position(db, conversation.id)
+
     user_message = Message(
         conversation_id=conversation.id,
         role="user",
         content=content,
+        position=next_pos,
     )
 
     db.add(user_message)
@@ -258,7 +275,7 @@ def stream_message(
     previous_messages = db.scalars(
         select(Message)
         .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.position.asc(), Message.created_at.asc())
     ).all()
 
     ai_messages = [
@@ -285,6 +302,7 @@ def stream_message(
                     conversation_id=conversation.id,
                     role="assistant",
                     content=full_response,
+                    position=next_pos + 1,
                 )
 
                 db.add(assistant_message)
@@ -406,7 +424,7 @@ def regenerate_message(
     messages = db.scalars(
         select(Message)
         .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.position.asc(), Message.created_at.asc())
     ).all()
 
     if not messages:
@@ -427,25 +445,23 @@ def regenerate_message(
             detail="No user message found",
         )
 
-    # Remove the latest assistant response
-    latest_assistant = next(
-        (
-            message
-            for message in reversed(messages)
-            if message.role == "assistant"
-            and message.created_at > latest_user_message.created_at
-        ),
-        None,
-    )
+    # Remove assistant messages generated after the latest user message's position
+    later_assistant_messages = db.scalars(
+        select(Message).where(
+            Message.conversation_id == conversation.id,
+            Message.position > latest_user_message.position,
+        )
+    ).all()
 
-    if latest_assistant:
-        db.delete(latest_assistant)
-        db.commit()
+    for old_message in later_assistant_messages:
+        db.delete(old_message)
+
+    db.commit()
 
     remaining_messages = db.scalars(
         select(Message)
         .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.position.asc(), Message.created_at.asc())
     ).all()
 
     ai_messages = [
@@ -455,6 +471,188 @@ def regenerate_message(
         }
         for message in remaining_messages
     ]
+
+    next_assistant_pos = latest_user_message.position + 1
+
+    stop_event = Event()
+    generation_key = str(conversation.id)
+    active_generations[generation_key] = stop_event
+
+    def generate():
+        full_response = ""
+
+        try:
+            for chunk in stream_ai_response(
+                ai_messages,
+                stop_event,
+            ):
+                full_response += chunk
+                yield chunk
+
+            if full_response:
+                assistant_message = Message(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=full_response,
+                    position=next_assistant_pos,
+                )
+
+                db.add(assistant_message)
+                db.commit()
+
+        except Exception as exc:
+            db.rollback()
+            print(f"Regeneration error: {exc}")
+
+        finally:
+            active_generations.pop(
+                generation_key,
+                None,
+            )
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# edit message
+@router.patch("/conversations/{conversation_id}/messages/{message_id}")
+def edit_message(
+    conversation_id: uuid.UUID,
+    message_id: uuid.UUID,
+    data: EditMessageRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    content = data.content.strip()
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="Message cannot be empty",
+        )
+
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found",
+        )
+
+    message = db.scalar(
+        select(Message).where(
+            Message.id == message_id,
+            Message.conversation_id == conversation.id,
+            Message.role == "user",
+        )
+    )
+
+    if not message:
+        raise HTTPException(
+            status_code=404,
+            detail="User message not found",
+        )
+
+    message.content = content
+
+    db.commit()
+    db.refresh(message)
+
+    return {
+        "id": str(message.id),
+        "content": message.content,
+        "position": message.position,
+    }
+
+
+# edit resend message
+@router.post("/conversations/{conversation_id}/messages/{message_id}/edit-resend")
+def edit_and_resend_message(
+    conversation_id: uuid.UUID,
+    message_id: uuid.UUID,
+    data: EditMessageRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    content = data.content.strip()
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="Message cannot be empty",
+        )
+
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found",
+        )
+
+    message = db.scalar(
+        select(Message).where(
+            Message.id == message_id,
+            Message.conversation_id == conversation.id,
+            Message.role == "user",
+        )
+    )
+
+    if not message:
+        raise HTTPException(
+            status_code=404,
+            detail="User message not found",
+        )
+
+    # Update edited message
+    message.content = content
+
+    # Find messages after edited message by explicit position ordering
+    later_messages = db.scalars(
+        select(Message).where(
+            Message.conversation_id == conversation.id,
+            Message.position > message.position,
+        )
+    ).all()
+
+    # Delete old assistant/user branch
+    for old_message in later_messages:
+        db.delete(old_message)
+
+    db.commit()
+
+    # Reload remaining conversation
+    remaining_messages = db.scalars(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.position.asc(), Message.created_at.asc())
+    ).all()
+
+    ai_messages = [
+        {
+            "role": item.role,
+            "content": item.content,
+        }
+        for item in remaining_messages
+    ]
+
+    next_assistant_pos = message.position + 1
 
     stop_event = Event()
 
@@ -478,6 +676,7 @@ def regenerate_message(
                     conversation_id=conversation.id,
                     role="assistant",
                     content=full_response,
+                    position=next_assistant_pos,
                 )
 
                 db.add(assistant_message)
@@ -485,7 +684,7 @@ def regenerate_message(
 
         except Exception as exc:
             db.rollback()
-            print(f"Regeneration error: {exc}")
+            print(f"Edit/resend error: {exc}")
 
         finally:
             active_generations.pop(
